@@ -1,0 +1,64 @@
+name: transfer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache \
+            /usr/local/share/boost /usr/local/lib/node_modules /opt/microsoft /usr/share/swift || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Download source zip
+        run: |
+          set -euo pipefail
+          curl -L --retry 8 --retry-all-errors --retry-delay 15 --connect-timeout 60 \
+            -o nos.zip "https://pixeldrain.com/api/file/jMXfd95F?download"
+          ls -l nos.zip
+          echo "ac8e8f6013a4405b2c53101ffa82ef773f52eafef20737c0ecac1a428e1912c0  nos.zip" | sha256sum -c -
+
+      - name: Extract only super.img
+        run: |
+          set -euo pipefail
+          unzip -Z1 nos.zip | tr -d '\r' > list.txt
+          wc -l list.txt
+          head -60 list.txt
+          SUPER="$(grep -iE '(^|/)super\.img$' list.txt | head -n1)"
+          echo "SUPER=[$SUPER]"
+          test -n "$SUPER"
+          unzip -o nos.zip "$SUPER" -d out
+          mv "out/$SUPER" super.img
+          rm -rf out nos.zip list.txt
+          ls -l super.img
+          sha256sum super.img
+          file super.img || true
+          df -h /
+
+      - name: Compress with 7z maximum
+        run: |
+          set -euo pipefail
+          7z a -t7z -m0=lzma2:d=256m:fb=273:mf=bt4:mc=48 -mx=9 -ms=on -mmt=3 \
+            super_max.7z super.img
+          7z t super_max.7z
+          ls -l super_max.7z
+          sha256sum super_max.7z | tee sums.txt
+          md5sum super_max.7z | tee -a sums.txt
+          df -h /
+
+      - name: Upload to Gofile
+        run: |
+          set -euo pipefail
+          SERVER="$(curl -sS --retry 5 https://api.gofile.io/servers | jq -r '.data.servers[0].name')"
+          echo "server=$SERVER"
+          RESP="$(curl -sS --retry 3 -F "file=@super_max.7z" "https://${SERVER}.gofile.io/contents/uploadfile")"
+          echo "$RESP" | jq .
+          echo "$RESP" | jq -r '.data.downloadPage' | tee link.txt
