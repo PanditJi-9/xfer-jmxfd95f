@@ -54,11 +54,16 @@ jobs:
           md5sum super_max.7z | tee -a sums.txt
           df -h /
 
-      - name: Upload to Gofile
+      - name: Upload to Pixeldrain
+        env:
+          PD_KEY: ${{ secrets.PD_KEY }}
         run: |
           set -euo pipefail
-          SERVER="$(curl -sS --retry 5 https://api.gofile.io/servers | jq -r '.data.servers[0].name')"
-          echo "server=$SERVER"
-          RESP="$(curl -sS --retry 3 -F "file=@super_max.7z" "https://${SERVER}.gofile.io/contents/uploadfile")"
-          echo "$RESP" | jq .
-          echo "$RESP" | jq -r '.data.downloadPage' | tee link.txt
+          RESP="$(curl -sS --fail-with-body --retry 5 --retry-all-errors --connect-timeout 60 \
+            -T super_max.7z -u ":$PD_KEY" "https://pixeldrain.com/api/file/super_max.7z")"
+          echo "$RESP" | jq '{success,id,name,size,hash_sha256}'
+          ID="$(echo "$RESP" | jq -r '.id')"
+          test -n "$ID" -a "$ID" != "null"
+          echo "https://pixeldrain.com/u/$ID" | tee link.txt
+          curl -sS -u ":$PD_KEY" "https://pixeldrain.com/api/file/$ID/info" \
+            | jq '{id,name,size,hash_sha256,availability}'
