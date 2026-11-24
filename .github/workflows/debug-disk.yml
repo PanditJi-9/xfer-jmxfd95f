@@ -9,7 +9,7 @@ permissions:
 jobs:
   debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Show disk layout
         run: |
@@ -18,8 +18,28 @@ jobs:
           df -h / /mnt /tmp /home/runner 2>&1 || true
           df -i / /mnt 2>&1 || true
           lsblk -f 2>&1 || true
-          mount | grep -E ' on / | on /mnt | on /tmp ' || true
+          mount | grep -E ' on / | on /mnt | on /tmp | on /home' || true
           ls -ld /mnt /mnt/* 2>&1 | head -20 || true
-          touch /mnt/test && ls -l /mnt/test && rm /mnt/test
+          echo "--- runner diag fs ---"
+          find /home/runner/actions-runner -maxdepth 3 -name _diag -print 2>/dev/null || true
+          for p in /home/runner/actions-runner/cached/2.338.2/_diag /home/runner/actions-runner/_diag; do
+            [ -e "$p" ] || continue
+            findmnt -T "$p" || true
+            df -h "$p" || true
+            df -i "$p" || true
+            du -sh "$p" 2>/dev/null || true
+          done
+          echo "--- limits ---"
+          ulimit -a || true
+          echo "--- write 15G test to /mnt/os4 ---"
+          sudo mkdir -p /mnt/os4
+          sudo chown -R "$(id -un):$(id -gn)" /mnt/os4
+          df -h /mnt/os4
+          dd if=/dev/zero of=/mnt/os4/test15g.bin bs=1M count=15000 status=progress
+          sync
+          ls -l /mnt/os4/test15g.bin
+          df -h /mnt/os4
+          rm -f /mnt/os4/test15g.bin
+          df -h /mnt/os4
           echo "--- top dirs on / ---"
           sudo du -x -h -d1 / 2>/dev/null | sort -h | tail -20
