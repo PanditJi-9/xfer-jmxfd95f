@@ -1,0 +1,116 @@
+name: vendor-odm-diff
+on:
+  workflow_dispatch:
+    inputs:
+      ota_url:
+        description: "OTA zip URL"
+        required: true
+      mode:
+        description: "report or package"
+        type: choice
+        options: [report, package]
+        default: report
+      tag:
+        description: "Release tag (package mode)"
+        required: false
+        default: "vendor-odm-OS4.0.4.0-XOJCNXM"
+permissions:
+  contents: write
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disk cleanup
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup || true
+          sudo apt-get clean
+          df -h /
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full erofs-utils android-sdk-libsparse-utils aria2 unzip file >/dev/null
+      - name: Download OTA
+        run: |
+          mkdir -p work reports out
+          aria2c -x16 -s16 -k 1M --file-allocation=none --console-log-level=warn --summary-interval=0 -d work -o ota.zip "${{ inputs.ota_url }}"
+          ls -lh work/ota.zip
+      - name: Extract vendor and odm images
+        run: |
+          cd work
+          unzip -Z1 ota.zip | grep -E '(^|/)(vendor|odm)\.img$' | tee image-entries.txt
+          mkdir -p ex
+          while IFS= read -r n; do
+            echo "extracting $n"
+            unzip -o -q ota.zip "$n" -d ex
+          done < image-entries.txt
+          for p in vendor odm; do
+            f=$(find ex -type f -name "$p.img" | head -1)
+            if [ -n "$f" ]; then mv "$f" "$p.img"; fi
+          done
+          rm -rf ex ota.zip
+          ls -lh
+      - name: Prepare filesystems
+        run: |
+          cd work
+          for p in vendor odm; do
+            f="$p.img"
+            [ -f "$f" ] || { echo "MISSING $p.img"; continue; }
+            echo "$p: $(file -b "$f")"
+            if file -b "$f" | grep -qi 'sparse'; then
+              simg2img "$f" "$p.raw.img" && mv "$p.raw.img" "$f"
+              echo "$p after simg2img: $(file -b "$f")"
+            fi
+            mkdir -p "mnt_$p"
+            if sudo mount -o loop,ro "$f" "mnt_$p"; then
+              echo "mounted $p"; sudo ls "mnt_$p" | head
+            else
+              echo "MOUNT FAILED $p; trying erofs extract"
+              sudo fsck.erofs --extract="mnt_$p" "$f" || true
+            fi
+          done
+          df -h /
+      - name: Compare
+        run: |
+          for p in vendor odm; do
+            extra=""
+            if [ "${{ inputs.mode }}" = "package" ]; then extra="--copy-root out/الأصلي"; fi
+            sudo -E python3 scripts/compare_tree.py --partition "$p" --mount "work/mnt_$p" --manifest "manifests/$p.jsonl.gz" --out "reports/$p" $extra || echo "compare failed for $p"
+          done
+          sudo chown -R "$(id -u):$(id -g)" reports out 2>/dev/null || true
+          ls -lh reports
+      - name: Package originals
+        if: ${{ inputs.mode == 'package' }}
+        run: |
+          cd out
+          echo "Staging size:"; du -sh الأصلي
+          sudo 7z a -t7z -mx=7 -mmt=on -v1500m original-diffs.7z الأصلي
+          sudo chown -R "$(id -u):$(id -g)" .
+          ls -lh
+      - name: Publish release
+        if: ${{ inputs.mode == 'package' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          gh release create "$TAG" --title "vendor/odm diff $TAG" --notes "Automated vendor/odm comparison (OS4.0.4.0.XOJCNXM vs modified tree)." || true
+          gh release upload "$TAG" out/original-diffs.7z.* reports/* --clobber
+          gh release view "$TAG" --json assets --jq '.assets[] | [.name, .size] | @tsv'
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendor-odm-report
+          path: reports/
+          if-no-files-found: warn
+      - name: Summary
+        if: always()
+        run: |
+          cat reports/*.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      - name: Cleanup mounts
+        if: always()
+        run: |
+          sudo umount work/mnt_vendor 2>/dev/null || true
+          sudo umount work/mnt_odm 2>/dev/null || true
