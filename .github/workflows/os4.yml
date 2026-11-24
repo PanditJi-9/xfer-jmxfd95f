@@ -14,6 +14,9 @@ jobs:
       WORK: /mnt/os4
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Free disk space and prepare /mnt work dir
         run: |
           set -euo pipefail
@@ -75,9 +78,8 @@ jobs:
           for i in $(seq 0 53); do
             echo "chunk $i"
             unzip -p OS4_RODIN.zip "images/super.img.$i" > chunk.sparse
-            "$GITHUB_WORKSPACE/tools/lptools/simg2img" chunk.sparse chunk.raw
-            cat chunk.raw >> super.img
-            rm -f chunk.sparse chunk.raw
+            python3 "$GITHUB_WORKSPACE/tools/extract_raw.py" chunk.sparse super.img
+            rm -f chunk.sparse
             if [ $((i % 10)) -eq 0 ]; then df -h "$WORK"; fi
           done
           ls -l super.img
@@ -147,13 +149,13 @@ jobs:
             4) super.sha256: بصمة صورة super الخام التي أُعيد تجميعها (11,811,160,064 بايت).
           
           ملاحظة:
-            super.img الأصلي لم يُضمَّن. تم تجميع الأجزاء 54 (كل جزء صورة sparse
-            مستقلة) وتحويلها إلى صورة raw ثم استخراج الأقسام المطلوبة فقط.
+            super.img الأصلي لم يُضمَّن. تم تجميع بيانات RAW الجديدة فقط من
+            الأجزاء sparse التراكمية وعددها 54، ثم استخراج الأقسام المطلوبة.
             الصورة الخام الكاملة كانت: 11,811,160,064 بايت.
           
-            The original super.img is NOT included. The 54 chunks (each an
-            independent sparse image) were concatenated as raw and only the
-            requested partitions were extracted.
+            The original super.img is NOT included. Only the new RAW payload
+            from each of the 54 cumulative sparse chunks was concatenated, then
+            only the requested partitions were extracted.
           
           تحقق / Verify:
             sha256sum -c SHA256SUMS.txt
