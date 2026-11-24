@@ -1,0 +1,25 @@
+name: debug-disk
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Show disk layout
+        run: |
+          set -x
+          df -h
+          df -h / /mnt /tmp /home/runner 2>&1 || true
+          df -i / /mnt 2>&1 || true
+          lsblk -f 2>&1 || true
+          mount | grep -E ' on / | on /mnt | on /tmp ' || true
+          ls -ld /mnt /mnt/* 2>&1 | head -20 || true
+          touch /mnt/test && ls -l /mnt/test && rm /mnt/test
+          echo "--- top dirs on / ---"
+          sudo du -x -h -d1 / 2>/dev/null | sort -h | tail -20
