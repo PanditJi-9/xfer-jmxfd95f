@@ -96,7 +96,7 @@ jobs:
         run: |
           cd out
           echo "Staging size:"; du -sh الأصلي
-          sudo 7z a -t7z -mx=7 -mmt=on -v1500m original-diffs.7z الأصلي
+          sudo 7z a -t7z -mx=7 -mmt=on -snl -v1500m original-diffs.7z الأصلي
           sudo chown -R "$(id -u):$(id -g)" .
           ls -lh
       - name: Publish release
