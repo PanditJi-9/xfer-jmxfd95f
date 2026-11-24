@@ -112,39 +112,39 @@ jobs:
         run: |
           set -euo pipefail
           cat > OS4_RODIN_no_super/README.txt <<'EOF'
-OS4 RODIN (OS4_RODIN.zip) — كل شيء ما عدا super.img
-=====================================================
-
-المصدر / Source:
-  https://pixeldrain.com/u/2sGnr5Ee
-  OS4_RODIN.zip
-  SHA-256: f28432d5fb295508375cd3c2833afcfaa99223b5105a7a77bf99edf872adf2cd
-
-المحتوى / Contents:
-  1) جميع ملفات الروم الأصلية ما عدا أجزاء super.img.0 .. super.img.53
-     All original ROM files except the super.img.0 .. super.img.53 chunks.
-  2) أقسام مستخرجة من super.img (slot A):
-     Partitions extracted from super.img (slot A):
-       extracted_from_super/vendor.img
-       extracted_from_super/odm.img
-       extracted_from_super/vendor_dlkm.img
-       extracted_from_super/odm_dlkm.img
-       extracted_from_super/system_dlkm.img
-  3) lpdump.txt: جدول أقسام super الأصلي.
-  4) super.sha256: بصمة صورة super الخام التي أُعيد تجميعها (11,811,160,064 بايت).
-
-ملاحظة:
-  super.img الأصلي لم يُضمَّن. تم تجميع الأجزاء 54 (كل جزء صورة sparse
-  مستقلة) وتحويلها إلى صورة raw ثم استخراج الأقسام المطلوبة فقط.
-  الصورة الخام الكاملة كانت: 11,811,160,064 بايت.
-
-  The original super.img is NOT included. The 54 chunks (each an
-  independent sparse image) were concatenated as raw and only the
-  requested partitions were extracted.
-
-تحقق / Verify:
-  sha256sum -c SHA256SUMS.txt
-EOF
+          OS4 RODIN (OS4_RODIN.zip) — كل شيء ما عدا super.img
+          =====================================================
+          
+          المصدر / Source:
+            https://pixeldrain.com/u/2sGnr5Ee
+            OS4_RODIN.zip
+            SHA-256: f28432d5fb295508375cd3c2833afcfaa99223b5105a7a77bf99edf872adf2cd
+          
+          المحتوى / Contents:
+            1) جميع ملفات الروم الأصلية ما عدا أجزاء super.img.0 .. super.img.53
+               All original ROM files except the super.img.0 .. super.img.53 chunks.
+            2) أقسام مستخرجة من super.img (slot A):
+               Partitions extracted from super.img (slot A):
+                 extracted_from_super/vendor.img
+                 extracted_from_super/odm.img
+                 extracted_from_super/vendor_dlkm.img
+                 extracted_from_super/odm_dlkm.img
+                 extracted_from_super/system_dlkm.img
+            3) lpdump.txt: جدول أقسام super الأصلي.
+            4) super.sha256: بصمة صورة super الخام التي أُعيد تجميعها (11,811,160,064 بايت).
+          
+          ملاحظة:
+            super.img الأصلي لم يُضمَّن. تم تجميع الأجزاء 54 (كل جزء صورة sparse
+            مستقلة) وتحويلها إلى صورة raw ثم استخراج الأقسام المطلوبة فقط.
+            الصورة الخام الكاملة كانت: 11,811,160,064 بايت.
+          
+            The original super.img is NOT included. The 54 chunks (each an
+            independent sparse image) were concatenated as raw and only the
+            requested partitions were extracted.
+          
+          تحقق / Verify:
+            sha256sum -c SHA256SUMS.txt
+          EOF
           cd OS4_RODIN_no_super
           find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
           wc -l SHA256SUMS.txt
