@@ -37,30 +37,40 @@ jobs:
           mkdir -p work reports out
           aria2c -x16 -s16 -k 1M --file-allocation=none --console-log-level=warn --summary-interval=0 -d work -o ota.zip "${{ inputs.ota_url }}"
           ls -lh work/ota.zip
-      - name: Extract vendor and odm images
+      - name: Install payload dumper
+        run: |
+          curl -sL --retry 3 -o /tmp/pd.tar.gz https://github.com/ssut/payload-dumper-go/releases/download/2.1.0/payload-dumper-go_2.1.0_linux_amd64.tar.gz
+          mkdir -p /tmp/pd && tar -xzf /tmp/pd.tar.gz -C /tmp/pd
+          sudo install -m 755 /tmp/pd/payload-dumper-go /usr/local/bin/payload-dumper-go
+          payload-dumper-go --help | head -20
+      - name: List payload partitions
         run: |
           cd work
-          unzip -Z1 ota.zip | grep -E '(^|/)(vendor|odm)\.img$' | tee image-entries.txt
-          mkdir -p ex
-          while IFS= read -r n; do
-            echo "extracting $n"
-            unzip -o -q ota.zip "$n" -d ex
-          done < image-entries.txt
-          for p in vendor odm; do
-            f=$(find ex -type f -name "$p.img" | head -1)
-            if [ -n "$f" ]; then mv "$f" "$p.img"; fi
-          done
-          rm -rf ex ota.zip
-          ls -lh
+          payload-dumper-go -l ota.zip 2>&1 | head -100 || true
+      - name: Dump vendor and odm
+        run: |
+          cd work
+          mkdir -p images
+          if ! payload-dumper-go -p vendor,odm -o images ota.zip; then
+            echo "ZIP INPUT FAILED - extracting payload.bin"
+            rm -rf images && mkdir -p images
+            unzip -o -q ota.zip payload.bin
+            payload-dumper-go -p vendor,odm -o images payload.bin
+            rm -f payload.bin
+          fi
+          rm -f ota.zip
+          ls -lh images
+          file images/* || true
+          df -h /
       - name: Prepare filesystems
         run: |
           cd work
           for p in vendor odm; do
-            f="$p.img"
+            f="images/$p.img"
             [ -f "$f" ] || { echo "MISSING $p.img"; continue; }
             echo "$p: $(file -b "$f")"
             if file -b "$f" | grep -qi 'sparse'; then
-              simg2img "$f" "$p.raw.img" && mv "$p.raw.img" "$f"
+              simg2img "$f" "images/$p.raw.img" && mv "images/$p.raw.img" "$f"
               echo "$p after simg2img: $(file -b "$f")"
             fi
             mkdir -p "mnt_$p"
